@@ -9,6 +9,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Версия Kotlin задаётся BOM'ом Spring Boot: kotlin-stdlib приходит из него
+      # и зафиксирован в gradle.lockfile. Поднимать плагин Kotlin в отрыве от
+      # Spring Boot нельзя — сборка падает на несовпадении версий компилятора
+      # и stdlib. Kotlin приезжает вместе с обновлением самого Spring Boot.
+      - dependency-name: org.jetbrains.kotlin:*
 
   # Сами actions — тоже зависимости, и через них проходили реальные
   # supply-chain-атаки. Они закреплены по SHA, поэтому автоматическое

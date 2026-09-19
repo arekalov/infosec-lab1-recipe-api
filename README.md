@@ -477,14 +477,39 @@ uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
 ### Отчёты
 
-<!-- Скриншоты добавляются после первого зелёного прогона -->
+Первый же прогон прошёл полностью зелёным — все пять job.
 
-![Actions: все проверки пройдены](docs/img/actions.png)
+![Прогон CI: сборка, тесты и четыре сканера](docs/img/ci-run.png)
+
+Проверки запускаются и на push, и на pull request. На скриншоте ниже видно оба триггера:
+прогон по коммиту в `main` и прогон по pull request, автоматически открытому Dependabot.
+
+![Список прогонов workflow CI](docs/img/actions.png)
+
+Результаты всех трёх сканеров, публикующих SARIF, собираются во вкладке Security.
+Ни одной находки:
+
+| Инструмент | Правил применено | Находок |
+|---|---|---|
+| CodeQL | 120 | 0 |
+| Semgrep OSS | 117 | 0 |
+| Trivy | — | 0 |
 
 ![Security: результаты CodeQL, Semgrep и Trivy](docs/img/security.png)
 
 Ссылка на последний успешный запуск:
 [Actions → CI](https://github.com/arekalov/infosec-lab1-recipe-api/actions/workflows/ci.yml)
+
+### Дополнительно: CI поймал реальную проблему
+
+Сразу после первого прогона Dependabot предложил поднять плагин Kotlin с 2.3.21 до 2.4.20,
+и CI на этом pull request упал. Причина содержательная: версия Kotlin задаётся BOM'ом
+Spring Boot, `kotlin-stdlib` приходит оттуда же и зафиксирован в `gradle.lockfile` —
+поднимать компилятор в отрыве от Spring Boot нельзя.
+
+Это ровно то, ради чего pipeline и нужен: изменение, выглядевшее рутинным обновлением,
+не доехало до `main`. В `dependabot.yml` добавлено исключение для `org.jetbrains.kotlin:*`
+с объяснением, Kotlin будет обновляться вместе со Spring Boot.
 
 ---
 
