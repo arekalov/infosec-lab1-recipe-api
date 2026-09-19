@@ -1,0 +1,19 @@
+version: 2
+
+# SAST и SCA в CI ловят уязвимости, которые уже попали в проект.
+# Dependabot закрывает вторую половину задачи — приносит обновления,
+# когда уязвимость публикуют, не дожидаясь ручной ревизии зависимостей.
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Сами actions — тоже зависимости, и через них проходили реальные
+  # supply-chain-атаки. Они закреплены по SHA, поэтому автоматическое
+  # обновление здесь особенно важно: вручную SHA никто не пересматривает.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

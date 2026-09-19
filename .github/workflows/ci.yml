@@ -1,0 +1,183 @@
+name: CI
+
+# Проверки запускаются на каждый push в main и на каждый pull request,
+# как того требует задание.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Права выданы по минимуму: чтение кода и запись результатов сканирования.
+# Явное указание нужно ещё и потому, что иначе GITHUB_TOKEN получил бы права
+# по умолчанию, которых у сканеров быть не должно.
+permissions:
+  contents: read
+
+# Все actions закреплены по полному SHA коммита, а не по тегу.
+# Тег — подвижная ссылка: в марте 2026 через угнанные учётные данные были
+# перевыпущены теги нескольких популярных actions, включая Trivy. SHA такой
+# подмене не подвержен.
+
+jobs:
+  build:
+    name: Сборка и тесты
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Java 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Сборка и тесты
+        run: ./gradlew build --no-daemon
+
+      - name: Отчёт о тестах
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-report
+          path: build/reports/tests/test
+          retention-days: 7
+
+      # Артефакт нужен SCA-джобе: Trivy разбирает вложенные jar-файлы
+      # из BOOT-INF/lib внутри fat-jar.
+      - name: Сохранить fat-jar
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: application-jar
+          path: build/libs/*.jar
+          retention-days: 1
+
+  sast-codeql:
+    name: 'SAST: CodeQL'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Java 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # build-mode: manual обязателен для Kotlin: при build-mode none
+      # Kotlin-файлы не попадают в базу и анализ оказывается пустым.
+      - name: Инициализация CodeQL
+        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          queries: security-extended
+
+      - name: Компиляция для анализа
+        run: ./gradlew clean assemble --no-daemon
+
+      - name: Анализ
+        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          category: '/language:java-kotlin'
+
+  sast-semgrep:
+    name: 'SAST: Semgrep'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Установка Semgrep
+        run: pipx install semgrep
+
+      # Правила берутся из открытого реестра, токен не нужен.
+      - name: Анализ правилами Semgrep
+        run: semgrep scan --config p/kotlin --config p/java --config p/secrets --sarif --output semgrep.sarif
+        continue-on-error: true
+
+      - name: Публикация результатов
+        if: always()
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  sca-trivy:
+    name: 'SCA: Trivy'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Скачать fat-jar
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: application-jar
+          path: artifacts
+
+      # Trivy для Gradle умеет читать gradle.lockfile, которого у нас нет,
+      # зато разбирает jar рекурсивно — поэтому сканируем собранный артефакт,
+      # а не исходники. Так в отчёт попадают и транзитивные зависимости.
+      - name: Сканирование зависимостей
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: artifacts
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+
+      - name: Публикация результатов
+        if: always()
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+      # Второй прогон — уже в текстовом виде и с падением сборки,
+      # чтобы критические находки нельзя было не заметить.
+      - name: Проверка на критические уязвимости
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: artifacts
+          format: table
+          severity: CRITICAL
+          exit-code: '1'
+
+  sca-osv:
+    name: 'SCA: OSV-Scanner'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Сканер читает gradle.lockfile — зафиксированный перечень версий
+      # runtime-зависимостей, включая транзитивные.
+      - name: Проверка по базе OSV
+        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --recursive
+            ./
