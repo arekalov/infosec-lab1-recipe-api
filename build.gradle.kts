@@ -63,3 +63,16 @@ allOpen {
 tasks.withType<Test> {
 	useJUnitPlatform()
 }
+
+// Блокировка версий runtime-зависимостей.
+//
+// Зафиксированный gradle.lockfile даёт две вещи: сборка перестаёт зависеть от того,
+// что именно окажется в репозитории на момент запуска, и у SCA-сканеров появляется
+// достоверный перечень версий — без него они видят только объявленные координаты.
+//
+// Обновление после изменения зависимостей:
+//   ./gradlew dependencies --configuration runtimeClasspath --write-locks
+configurations.named("runtimeClasspath") {
+	resolutionStrategy.activateDependencyLocking()
+}
+
