@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.JoinColumn
+import jakarta.persistence.ManyToOne
 import jakarta.persistence.PreUpdate
 import jakarta.persistence.Table
 import java.time.Instant
@@ -42,6 +43,14 @@ class Recipe(
 
     @Column(nullable = false)
     var servings: Int,
+
+    /**
+     * Владелец рецепта. Читать и менять рецепт может только он —
+     * это защита от IDOR (OWASP A01: Broken Access Control).
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "owner_id", nullable = false)
+    var owner: UserAccount,
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
