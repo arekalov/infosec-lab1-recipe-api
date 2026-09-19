@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    # Тесты изолированы от локальной файловой БД.
+    url: jdbc:h2:mem:recipes-test;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+app:
+  jwt:
+    # Тестовый ключ, намеренно лежащий в репозитории: им подписаны только токены
+    # внутри тестов. Рабочий секрет приходит из окружения и сюда не попадает.
+    secret: dGVzdC1vbmx5LXNlY3JldC1rZXktZm9yLXVuaXQtdGVzdHMh
+    issuer: recipe-api-test
+    ttl: 15m
