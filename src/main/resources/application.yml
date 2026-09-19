@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: recipe-api
+
+  datasource:
+    # H2 в файловом режиме: данные переживают перезапуск, внешний сервер БД не нужен.
+    url: jdbc:h2:file:./data/recipes;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ${DB_PASSWORD:}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    # Ленивая загрузка не должна тянуться из слоя представления.
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  h2:
+    console:
+      # Веб-консоль H2 выключена явно: исторически это вектор RCE (CVE-2021-42392).
+      enabled: false
+
+server:
+  error:
+    # Наружу не уходят ни текст исключения, ни stacktrace, ни binding-ошибки:
+    # это лишает атакующего информации о внутреннем устройстве приложения.
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+    include-exception: false
+
+logging:
+  level:
+    ru.itmo.infosec.recipes: INFO
